@@ -104,8 +104,8 @@ io.on('connection', (socket) => {
 
 app.use(morgan('tiny'));
 app.get('/tunnel_jwt_generator', (req, res) => {
-  console.log("user name:"+process.env.JWT_GENERATOR_USERNAME)
-  console.log("pass:"+process.env.JWT_GENERATOR_PASSWORD)
+  console.log("user name:"+process.env.JWT_GENERATOR_USERNAME);
+  console.log("pass:"+process.env.JWT_GENERATOR_PASSWORD);
   if (!process.env.JWT_GENERATOR_USERNAME || !process.env.JWT_GENERATOR_PASSWORD) {
     res.status(404);
     res.send('Not found');
@@ -286,4 +286,4 @@ httpServer.on('upgrade', (req, socket, head) => {
 });
 
 httpServer.listen(process.env.PORT || 3000);
-console.log(`app start at http://localhost:${process.env.PORT || 3000}`);
+console.log(`app start at 1 http://localhost:${process.env.PORT || 3000}`);
