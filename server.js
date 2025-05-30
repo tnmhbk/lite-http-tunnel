@@ -106,6 +106,8 @@ app.use(morgan('tiny'));
 app.get('/tunnel_jwt_generator', (req, res) => {
   process.env.JWT_GENERATOR_USERNAME = 'admin';
   process.env.JWT_GENERATOR_PASSWORD = 'admin';
+  process.env.VERIFY_TOKEN = '123456';
+  process.env.SECRET_KEY = '123456';
   if (!process.env.JWT_GENERATOR_USERNAME || !process.env.JWT_GENERATOR_PASSWORD) {
     res.status(404);
     res.send('Not found');
