@@ -17,10 +17,12 @@
       "generator": "secret"
     },
     "JWT_GENERATOR_USERNAME": {
-      "description": "username to access JWT generator"
+      "description": "username to access JWT generator",
+      "value": "admin"
     },
     "JWT_GENERATOR_PASSWORD": {
-      "description": "password to access JWT generator, remove this env after you get jwt token"
+      "description": "password to access JWT generator, remove this env after you get jwt token",
+      "value": "admin"
     }
   }
 }
