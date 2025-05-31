@@ -35,7 +35,8 @@ function emitLog(msg, type = 'info') {
   });
 }
 
-app.use('/socket.io', express.static(path.dirname(require.resolve('socket.io-client')) + '/dist'));
+const clientDir = path.dirname(require.resolve('socket.io-client')) + '/dist';
+app.use('/socket.io', express.static(clientDir));
 
 // Dashboard HTML
 app.get('/dashboard', (req, res) => {
