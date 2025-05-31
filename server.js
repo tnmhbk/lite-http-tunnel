@@ -16,18 +16,16 @@ const httpServer = http.createServer(app);
 // 2️⃣ Socket.IO instance cho tunnel client (path: /$web_tunnel)
 const ioTunnel = new Server(httpServer, {
   path: '/$web_tunnel',
-  maxHttpBufferSize: 1e8
+  maxHttpBufferSize: 1e8,
+  cors: { origin: '*' }
 });
-
-// 1️⃣ Socket.IO instance cho dashboard
-const ioDashboard = new Server(httpServer, { cors: { origin: '*' }, path: '/dashboard-socket' });
 
 require('events').defaultMaxListeners = 30;
 
 // 🌟 Gửi log tới dashboard
 function emitLog(msg, type = 'info') {
   console.log(msg);
-  ioDashboard.emit('proxy-log', {
+  ioTunnel.emit('proxy-log', {
     time: new Date().toISOString(),
     message: msg,
     type,
@@ -37,12 +35,6 @@ function emitLog(msg, type = 'info') {
 // Dashboard HTML
 app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
-
-// Dashboard socket.io
-ioDashboard.on('connection', (socket) => {
-  console.log('📡 Dashboard client connected');
-  socket.on('disconnect', () => console.log('❌ Dashboard client disconnected'));
 });
 
 // Tunnels
