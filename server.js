@@ -14,7 +14,7 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // 1️⃣ Socket.IO instance cho dashboard (mặc định path: /socket.io)
-const ioDashboard = new Server(httpServer, { cors: { origin: '*' } });
+const ioDashboard = new Server(httpServer, { cors: { origin: '*' }, path: '/dashboard-socket' });
 
 // 2️⃣ Socket.IO instance cho tunnel client (path: /$web_tunnel)
 const ioTunnel = new Server(httpServer, {
