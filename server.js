@@ -16,6 +16,9 @@ const webTunnelPath = '/$web_tunnel';
 const io = new Server(httpServer, {
   path: webTunnelPath,
   maxHttpBufferSize: 1e8,
+  cors: {
+    origin: '*', // Cho phép dashboard kết nối
+  },
 });
 
 // Increase max listeners to avoid warning
