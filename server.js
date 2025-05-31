@@ -12,42 +12,39 @@ const { TunnelRequest, TunnelResponse } = require('./lib');
 
 const app = express();
 const httpServer = http.createServer(app);
-const webTunnelPath = '/$web_tunnel';
-const io = new Server(httpServer, {
-  path: webTunnelPath,
+
+// 1️⃣ Socket.IO instance cho dashboard (mặc định path: /socket.io)
+const ioDashboard = new Server(httpServer, { cors: { origin: '*' } });
+
+// 2️⃣ Socket.IO instance cho tunnel client (path: /$web_tunnel)
+const ioTunnel = new Server(httpServer, {
+  path: '/$web_tunnel',
   maxHttpBufferSize: 1e8,
-  cors: {
-    origin: '*', // Cho phép dashboard kết nối
-  },
+  cors: { origin: '*' },
 });
 
-// Increase max listeners to avoid warning
 require('events').defaultMaxListeners = 30;
 
-// Dashboard Socket.IO namespace
-const dashboardIO = io.of('/dashboard-logs');
+// 🌟 Gửi log tới dashboard
 function emitLog(msg, type = 'info') {
   console.log(msg);
-  dashboardIO.emit('proxy-log', {
+  ioDashboard.emit('proxy-log', {
     time: new Date().toISOString(),
     message: msg,
     type,
   });
 }
 
-app.use('/socket.io', express.static(path.join(__dirname, 'node_modules', 'socket.io', 'client-dist')));
+// Dashboard static
+app.use('/dashboard', express.static(path.join(__dirname)));
 
-// Dashboard HTML
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
-
-// Dashboard Socket.IO handlers
-dashboardIO.on('connection', (socket) => {
-  console.log('📡 Dashboard client connected!');
+// Dashboard socket.io
+ioDashboard.on('connection', (socket) => {
+  console.log('📡 Dashboard client connected');
   socket.on('disconnect', () => console.log('❌ Dashboard client disconnected'));
 });
 
+// Tunnels
 let tunnelSockets = [];
 
 function getTunnelSocket(host, pathPrefix) {
@@ -62,7 +59,6 @@ function setTunnelSocket(host, pathPrefix, socket) {
 function removeTunnelSocket(host, pathPrefix) {
   emitLog(`ℹ️ Removing tunnel for ${host}, prefix: ${pathPrefix}`);
   tunnelSockets = tunnelSockets.filter((s) => !(s.host === host && s.pathPrefix === pathPrefix));
-  emitLog('tunnelSockets: ' + tunnelSockets.map((s) => s.host + (s.pathPrefix || '')).join(', '));
 }
 
 function getAvailableTunnelSocket(host, url) {
@@ -72,32 +68,25 @@ function getAvailableTunnelSocket(host, url) {
       if (!s.pathPrefix) return true;
       return url.indexOf(s.pathPrefix) === 0;
     })
-    .sort((a, b) => {
-      if (!a.pathPrefix) return 1;
-      if (!b.pathPrefix) return -1;
-      return b.pathPrefix.length - a.pathPrefix.length;
-    });
+    .sort((a, b) => (!a.pathPrefix ? 1 : !b.pathPrefix ? -1 : b.pathPrefix.length - a.pathPrefix.length));
   emitLog(`🔎 Matching tunnel for host=${host}, url=${url}: ${tunnels.length} found`);
   return tunnels[0]?.socket || null;
 }
 
-// JWT authentication
-io.use((socket, next) => {
+// JWT Auth for tunnel
+ioTunnel.use((socket, next) => {
   const connectHost = socket.handshake.headers.host;
   const pathPrefix = socket.handshake.headers['path-prefix'];
-  emitLog(`🔑 Auth attempt for ${connectHost}, pathPrefix=${pathPrefix}`);
-
+  emitLog(`🔑 Auth attempt for ${connectHost}, prefix=${pathPrefix}`);
   if (getTunnelSocket(connectHost, pathPrefix)) {
     emitLog(`❌ Reject: ${connectHost} already connected`, 'error');
     return next(new Error(`${connectHost} already has a connection`));
   }
-
   const token = socket.handshake.auth?.token;
   if (!token) {
     emitLog('❌ Reject: Missing token', 'error');
     return next(new Error('Authentication error'));
   }
-
   jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
     if (err || decoded.token !== process.env.VERIFY_TOKEN) {
       emitLog('❌ Reject: Invalid token', 'error');
@@ -108,53 +97,42 @@ io.use((socket, next) => {
   });
 });
 
-io.on('connection', (socket) => {
+// Tunnel socket.io connection
+ioTunnel.on('connection', (socket) => {
   const connectHost = socket.handshake.headers.host;
   const pathPrefix = socket.handshake.headers['path-prefix'];
   setTunnelSocket(connectHost, pathPrefix, socket);
   emitLog(`✅ Client connected: ${connectHost}, prefix=${pathPrefix}`);
-
-  const onMessage = (message) => {
-    emitLog(`💬 [${connectHost}] Message: ${message}`);
-    if (message === 'ping') {
-      socket.send('pong');
-    }
-  };
-  const onDisconnect = (reason) => {
-    emitLog(`⚠️ Client disconnected (${connectHost}, prefix=${pathPrefix}): ${reason}`);
+  socket.on('message', (msg) => emitLog(`💬 [${connectHost}] ${msg}`));
+  socket.once('disconnect', (reason) => {
+    emitLog(`⚠️ Client disconnected: ${reason}`);
     removeTunnelSocket(connectHost, pathPrefix);
-  };
-
-  socket.on('message', onMessage);
-  socket.once('disconnect', onDisconnect);
+  });
 });
 
-// JWT generator endpoint
+// JWT endpoint
 app.use(morgan('tiny'));
 app.get('/tunnel_jwt_generator', (req, res) => {
-  emitLog('🔑 JWT generator called');
   process.env.JWT_GENERATOR_USERNAME = 'admin';
   process.env.JWT_GENERATOR_PASSWORD = 'admin';
   process.env.VERIFY_TOKEN = '123456';
   process.env.SECRET_KEY = '123456';
+  emitLog('🔑 JWT generator called');
 
   if (!req.query.username || !req.query.password) {
     emitLog('❌ Missing credentials in JWT generator', 'error');
     return res.status(401).send('Forbidden');
   }
-
-  if (
-    req.query.username === process.env.JWT_GENERATOR_USERNAME &&
-    req.query.password === process.env.JWT_GENERATOR_PASSWORD
-  ) {
+  if (req.query.username === process.env.JWT_GENERATOR_USERNAME && req.query.password === process.env.JWT_GENERATOR_PASSWORD) {
     const jwtToken = jwt.sign({ token: process.env.VERIFY_TOKEN }, process.env.SECRET_KEY);
     emitLog('✅ JWT issued');
     return res.status(200).send(jwtToken);
   }
-  emitLog('❌ Invalid credentials in JWT generator', 'error');
+  emitLog('❌ Invalid credentials', 'error');
   res.status(401).send('Forbidden');
 });
 
+// Helper
 function getReqHeaders(req) {
   const encrypted = !!(req.isSpdy || req.connection.encrypted || req.connection.pair);
   const headers = { ...req.headers };
@@ -172,14 +150,7 @@ function getReqHeaders(req) {
   return headers;
 }
 
-app.get('/tunnels', (req, res) => {
-  res.json(tunnelSockets.map((s) => ({
-    host: s.host,
-    pathPrefix: s.pathPrefix,
-    connected: s.socket.connected,
-  })));
-});
-
+// Main tunnel handler
 app.use('/', (req, res) => {
   emitLog(`🌐 HTTP ${req.method}: ${req.url}`);
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
@@ -189,15 +160,9 @@ app.use('/', (req, res) => {
   }
 
   const requestId = uuidV4();
-  const tunnelRequest = new TunnelRequest({
-    socket: tunnelSocket,
-    requestId,
-    request: {
-      method: req.method,
-      headers: getReqHeaders(req),
-      path: req.url,
-    },
-  });
+  const tunnelRequest = new TunnelRequest({ socket: tunnelSocket, requestId, request: {
+    method: req.method, headers: getReqHeaders(req), path: req.url
+  }});
 
   const onReqError = (e) => {
     emitLog('❌ Request error: ' + e, 'error');
@@ -206,47 +171,24 @@ app.use('/', (req, res) => {
   req.once('aborted', onReqError);
   req.once('error', onReqError);
   req.pipe(tunnelRequest);
-
   req.once('finish', () => {
     req.off('aborted', onReqError);
     req.off('error', onReqError);
   });
 
-  const tunnelResponse = new TunnelResponse({
-    socket: tunnelSocket,
-    responseId: requestId,
-  });
-
-  const onRequestError = () => {
+  const tunnelResponse = new TunnelResponse({ socket: tunnelSocket, responseId: requestId });
+  tunnelResponse.once('requestError', () => {
     emitLog('❌ Tunnel request error', 'error');
-    tunnelResponse.off('response', onResponse);
-    tunnelResponse.destroy();
     res.status(502).end('Request error');
-  };
-  const onResponse = ({ statusCode, statusMessage, headers }) => {
+  });
+  tunnelResponse.once('response', ({ statusCode, statusMessage, headers }) => {
     emitLog(`↩️ Response: ${statusCode} ${statusMessage}`);
-    tunnelRequest.off('requestError', onRequestError);
     res.writeHead(statusCode, statusMessage, headers);
-  };
-
-  tunnelResponse.once('requestError', onRequestError);
-  tunnelResponse.once('response', onResponse);
+  });
   tunnelResponse.pipe(res);
-
-  const onSocketError = () => {
-    emitLog('❌ Tunnel socket disconnect', 'error');
-    res.off('close', onResClose);
-    res.status(500).end();
-  };
-  const onResClose = () => {
-    emitLog('ℹ️ Response closed');
-    tunnelSocket.off('disconnect', onSocketError);
-  };
-
-  tunnelSocket.once('disconnect', onSocketError);
-  res.once('close', onResClose);
 });
 
+// Start server
 httpServer.listen(process.env.PORT || 3000, () => {
   emitLog(`🚀 Server started at http://localhost:${process.env.PORT || 3000}`);
 });
