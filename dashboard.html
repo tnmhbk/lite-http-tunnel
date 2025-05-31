@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Proxy Dashboard</title>
+<style>
+  body { font-family: monospace; background: #000; color: #0f0; padding: 10px; }
+  pre { overflow-y: auto; max-height: 90vh; }
+</style>
+</head>
+<body>
+<h1>Proxy Dashboard</h1>
+<pre id="log"></pre>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io('/', { path: '/$web_tunnel' });
+  const logEl = document.getElementById('log');
+
+  socket.on('connect', () => {
+    logEl.innerText += '[Dashboard] Connected to server\n';
+  });
+  socket.on('disconnect', () => {
+    logEl.innerText += '[Dashboard] Disconnected from server\n';
+  });
+  socket.on('proxy-log', data => {
+    const line = `[${data.time}] ${data.type === 'error' ? '[ERROR]' : ''} ${data.message}`;
+    logEl.innerText += line + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  });
+</script>
+</body>
+</html>
