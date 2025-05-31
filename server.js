@@ -19,7 +19,7 @@ const ioTunnel = new Server(httpServer, {
   maxHttpBufferSize: 1e8
 });
 
-// 1️⃣ Socket.IO instance cho dashboard (mặc định path: /socket.io)
+// 1️⃣ Socket.IO instance cho dashboard
 const ioDashboard = new Server(httpServer, { cors: { origin: '*' }, path: '/dashboard-socket' });
 
 require('events').defaultMaxListeners = 30;
