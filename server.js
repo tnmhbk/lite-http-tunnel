@@ -146,6 +146,15 @@ function getReqHeaders(req) {
   return headers;
 }
 
+// Admin API: List active tunnels
+app.get('/tunnels', (req, res) => {
+  res.json(tunnelSockets.map((s) => ({
+    host: s.host,
+    pathPrefix: s.pathPrefix,
+    connected: s.socket.connected,
+  })));
+});
+
 // Main tunnel handler
 app.use('/', (req, res) => {
   console.log(`🌐 HTTP ${req.method}: ${req.url}`);
@@ -306,15 +315,6 @@ httpServer.on('upgrade', (req, socket, head) => {
 
   tunnelResponse.once('requestError', onRequestError);
   tunnelResponse.once('response', onResponse);
-});
-
-// Admin API: List active tunnels
-app.get('/tunnels', (req, res) => {
-  res.json(tunnelSockets.map((s) => ({
-    host: s.host,
-    pathPrefix: s.pathPrefix,
-    connected: s.socket.connected,
-  })));
 });
 
 httpServer.listen(process.env.PORT || 3000, () => {
