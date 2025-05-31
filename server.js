@@ -35,8 +35,10 @@ function emitLog(msg, type = 'info') {
   });
 }
 
-// Dashboard static
-app.use('/dashboard', express.static(path.join(__dirname)));
+// Dashboard HTML
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
 
 // Dashboard socket.io
 ioDashboard.on('connection', (socket) => {
