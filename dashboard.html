@@ -12,9 +12,9 @@
 <h1>Proxy Dashboard</h1>
 <pre id="log"></pre>
 
-<script src="/dashboard-socket/socket.io.js"></script>
+<script src="/$web_tunnel/socket.io.js"></script>
 <script>
-  const socket = io('/', { path: '/dashboard-socket' });
+  const socket = io('/', { path: '/$web_tunnel' });
   const logEl = document.getElementById('log');
 
   socket.on('connect', () => {
