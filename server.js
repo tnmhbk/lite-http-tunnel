@@ -14,118 +14,105 @@ const httpServer = http.createServer(app);
 const webTunnelPath = '/$web_tunnel';
 const io = new Server(httpServer, {
   path: webTunnelPath,
+  maxHttpBufferSize: 1e8,
 });
+
+// Increase max listeners to avoid warning
+require('events').defaultMaxListeners = 30;
 
 let tunnelSockets = [];
 
 function getTunnelSocket(host, pathPrefix) {
-  return tunnelSockets.find((s) =>
-    s.host === host && s.pathPrefix === pathPrefix
-  );
+  return tunnelSockets.find((s) => s.host === host && s.pathPrefix === pathPrefix);
 }
 
 function setTunnelSocket(host, pathPrefix, socket) {
-  tunnelSockets.push({
-    host,
-    pathPrefix,
-    socket,
-  });
+  tunnelSockets.push({ host, pathPrefix, socket });
 }
 
 function removeTunnelSocket(host, pathPrefix) {
-  tunnelSockets = tunnelSockets.filter((s) => 
-    !(s.host === host && s.pathPrefix === pathPrefix)
-  );
-  console.log('tunnelSockets: ', tunnelSockets);
+  tunnelSockets = tunnelSockets.filter((s) => !(s.host === host && s.pathPrefix === pathPrefix));
+  console.log('tunnelSockets:', tunnelSockets);
 }
 
 function getAvailableTunnelSocket(host, url) {
-  const tunnels = tunnelSockets.filter((s) => {
-    if (s.host !== host) {
-      return false;
-    }
-    if (!s.pathPrefix) {
-      return true;
-    }
-    return url.indexOf(s.pathPrefix) === 0;
-  }).sort((a, b) => {
-    if (!a.pathPrefix) {
-      return 1;
-    }
-    if (!b.pathPrefix) {
-      return -1;
-    }
-    return b.pathPrefix.length - a.pathPrefix.length;
-  });
-  if (tunnels.length === 0) {
-    return null;
-  }
-  return tunnels[0].socket;
+  const tunnels = tunnelSockets
+    .filter((s) => {
+      if (s.host !== host) return false;
+      if (!s.pathPrefix) return true;
+      return url.indexOf(s.pathPrefix) === 0;
+    })
+    .sort((a, b) => {
+      if (!a.pathPrefix) return 1;
+      if (!b.pathPrefix) return -1;
+      return b.pathPrefix.length - a.pathPrefix.length;
+    });
+  return tunnels[0]?.socket || null;
 }
 
+// JWT authentication
 io.use((socket, next) => {
   const connectHost = socket.handshake.headers.host;
   const pathPrefix = socket.handshake.headers['path-prefix'];
+
   if (getTunnelSocket(connectHost, pathPrefix)) {
-    return next(new Error(`${connectHost} has a existing connection`));
+    return next(new Error(`${connectHost} already has a connection`));
   }
-  if (!socket.handshake.auth || !socket.handshake.auth.token){
-    next(new Error('Authentication error'));
-  }
-  jwt.verify(socket.handshake.auth.token, process.env.SECRET_KEY, function(err, decoded) {
-    if (err) {
-      return next(new Error('Authentication error'));
-    }
-    if (decoded.token !== process.env.VERIFY_TOKEN) {
+
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication error'));
+
+  jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
+    if (err || decoded.token !== process.env.VERIFY_TOKEN) {
       return next(new Error('Authentication error'));
     }
     next();
-  });  
+  });
 });
 
 io.on('connection', (socket) => {
   const connectHost = socket.handshake.headers.host;
   const pathPrefix = socket.handshake.headers['path-prefix'];
   setTunnelSocket(connectHost, pathPrefix, socket);
-  console.log(`client connected at ${connectHost}, path prefix: ${pathPrefix}`);
+  console.log(`✅ Client connected at ${connectHost}, path prefix: ${pathPrefix}`);
+
   const onMessage = (message) => {
     if (message === 'ping') {
       socket.send('pong');
     }
-  }
-  const onDisconnect = (reason) => {
-    console.log('client disconnected: ', reason);
-    removeTunnelSocket(connectHost, pathPrefix);
-    socket.off('message', onMessage);
   };
+  const onDisconnect = (reason) => {
+    console.log('⚠️ Client disconnected:', reason);
+    removeTunnelSocket(connectHost, pathPrefix);
+  };
+
   socket.on('message', onMessage);
   socket.once('disconnect', onDisconnect);
 });
 
+// JWT generator endpoint
 app.use(morgan('tiny'));
 app.get('/tunnel_jwt_generator', (req, res) => {
   process.env.JWT_GENERATOR_USERNAME = 'admin';
   process.env.JWT_GENERATOR_PASSWORD = 'admin';
   process.env.VERIFY_TOKEN = '123456';
   process.env.SECRET_KEY = '123456';
-  if (!process.env.JWT_GENERATOR_USERNAME || !process.env.JWT_GENERATOR_PASSWORD) {
-    res.status(404);
-    res.send('Not found');
-    return;
+
+  if (!req.query.username || !req.query.password) {
+    return res.status(401).send('Forbidden');
   }
+
   if (
     req.query.username === process.env.JWT_GENERATOR_USERNAME &&
     req.query.password === process.env.JWT_GENERATOR_PASSWORD
   ) {
     const jwtToken = jwt.sign({ token: process.env.VERIFY_TOKEN }, process.env.SECRET_KEY);
-    res.status(200);
-    res.send(jwtToken);
-    return;
+    return res.status(200).send(jwtToken);
   }
-  res.status(401);
-  res.send('Forbidden');
+  res.status(401).send('Forbidden');
 });
 
+// Helper to clean forwarded headers
 function getReqHeaders(req) {
   const encrypted = !!(req.isSpdy || req.connection.encrypted || req.connection.pair);
   const headers = { ...req.headers };
@@ -136,21 +123,18 @@ function getReqHeaders(req) {
     proto: encrypted ? 'https' : 'http',
   };
   ['for', 'port', 'proto'].forEach((key) => {
-    const previousValue = req.headers[`x-forwarded-${key}`] || '';
-    headers[`x-forwarded-${key}`] =
-      `${previousValue || ''}${previousValue ? ',' : ''}${forwardValues[key]}`;
+    const prev = req.headers[`x-forwarded-${key}`] || '';
+    headers[`x-forwarded-${key}`] = `${prev ? prev + ',' : ''}${forwardValues[key]}`;
   });
   headers['x-forwarded-host'] = req.headers['x-forwarded-host'] || req.headers.host || '';
   return headers;
 }
 
+// Main tunnel handler
 app.use('/', (req, res) => {
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
-  if (!tunnelSocket) {
-    res.status(404);
-    res.send('Not Found');
-    return;
-  }
+  if (!tunnelSocket) return res.status(404).send('Not Found');
+
   const requestId = uuidV4();
   const tunnelRequest = new TunnelRequest({
     socket: tunnelSocket,
@@ -161,71 +145,69 @@ app.use('/', (req, res) => {
       path: req.url,
     },
   });
-  const onReqError = (e) => {
-    tunnelRequest.destroy(new Error(e || 'Aborted'));
-  }
+
+  const onReqError = (e) => tunnelRequest.destroy(new Error(e || 'Aborted'));
   req.once('aborted', onReqError);
   req.once('error', onReqError);
   req.pipe(tunnelRequest);
+
   req.once('finish', () => {
     req.off('aborted', onReqError);
     req.off('error', onReqError);
   });
+
   const tunnelResponse = new TunnelResponse({
     socket: tunnelSocket,
     responseId: requestId,
   });
+
   const onRequestError = () => {
     tunnelResponse.off('response', onResponse);
     tunnelResponse.destroy();
-    res.status(502);
-    res.end('Request error');
+    res.status(502).end('Request error');
   };
   const onResponse = ({ statusCode, statusMessage, headers }) => {
-    tunnelRequest.off('requestError', onRequestError)
+    tunnelRequest.off('requestError', onRequestError);
     res.writeHead(statusCode, statusMessage, headers);
   };
-  tunnelResponse.once('requestError', onRequestError)
+
+  tunnelResponse.once('requestError', onRequestError);
   tunnelResponse.once('response', onResponse);
   tunnelResponse.pipe(res);
+
   const onSocketError = () => {
     res.off('close', onResClose);
-    res.end(500);
+    res.status(500).end();
   };
   const onResClose = () => {
     tunnelSocket.off('disconnect', onSocketError);
   };
-  tunnelSocket.once('disconnect', onSocketError)
+
+  tunnelSocket.once('disconnect', onSocketError);
   res.once('close', onResClose);
 });
 
+// WS upgrade handling
 function createSocketHttpHeader(line, headers) {
-  return Object.keys(headers).reduce(function (head, key) {
-    var value = headers[key];
-
-    if (!Array.isArray(value)) {
-      head.push(key + ': ' + value);
+  return Object.keys(headers)
+    .reduce((head, key) => {
+      const value = headers[key];
+      if (Array.isArray(value)) {
+        value.forEach((v) => head.push(`${key}: ${v}`));
+      } else {
+        head.push(`${key}: ${value}`);
+      }
       return head;
-    }
-
-    for (var i = 0; i < value.length; i++) {
-      head.push(key + ': ' + value[i]);
-    }
-    return head;
-  }, [line])
-  .join('\r\n') + '\r\n\r\n';
+    }, [line])
+    .join('\r\n') + '\r\n\r\n';
 }
 
 httpServer.on('upgrade', (req, socket, head) => {
-  if (req.url.indexOf(webTunnelPath) === 0) {
-    return;
-  }
-  console.log(`WS ${req.url}`);
-  // proxy websocket request
+  if (req.url.indexOf(webTunnelPath) === 0) return;
+
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
-  if (!tunnelSocket) {
-    return;
-  }
+  if (!tunnelSocket) return;
+
   if (head && head.length) socket.unshift(head);
   const requestId = uuidV4();
   const tunnelRequest = new TunnelRequest({
@@ -238,10 +220,12 @@ httpServer.on('upgrade', (req, socket, head) => {
     },
   });
   req.pipe(tunnelRequest);
+
   const tunnelResponse = new TunnelResponse({
     socket: tunnelSocket,
     responseId: requestId,
   });
+
   const onRequestError = () => {
     tunnelResponse.off('response', onResponse);
     tunnelResponse.destroy();
@@ -249,24 +233,21 @@ httpServer.on('upgrade', (req, socket, head) => {
   };
   const onResponse = ({ statusCode, statusMessage, headers, httpVersion }) => {
     tunnelResponse.off('requestError', onRequestError);
+
     if (statusCode) {
-      socket.once('error', (err) => {
-        console.log(`WS ${req.url} ERROR`);
-        // ignore error
-      });
-      // not upgrade event
-      socket.write(createSocketHttpHeader(`HTTP/${httpVersion} ${statusCode} ${statusMessage}`, headers));
+      socket.write(
+        createSocketHttpHeader(`HTTP/${httpVersion} ${statusCode} ${statusMessage}`, headers)
+      );
       tunnelResponse.pipe(socket);
       return;
     }
-    const onSocketError = (err) => {
-      console.log(`WS ${req.url} ERROR`);
+
+    const onSocketError = () => {
       socket.off('end', onSocketEnd);
       tunnelSocket.off('disconnect', onTunnelError);
-      tunnelResponse.destroy(err);
+      tunnelResponse.destroy();
     };
     const onSocketEnd = () => {
-      console.log(`WS ${req.url} END`);
       socket.off('error', onSocketError);
       tunnelSocket.off('disconnect', onTunnelError);
       tunnelResponse.destroy();
@@ -277,15 +258,19 @@ httpServer.on('upgrade', (req, socket, head) => {
       socket.end();
       tunnelResponse.destroy();
     };
+
     socket.once('error', onSocketError);
     socket.once('end', onSocketEnd);
     tunnelSocket.once('disconnect', onTunnelError);
+
     socket.write(createSocketHttpHeader('HTTP/1.1 101 Switching Protocols', headers));
     tunnelResponse.pipe(socket).pipe(tunnelResponse);
-  }
-  tunnelResponse.once('requestError', onRequestError)
+  };
+
+  tunnelResponse.once('requestError', onRequestError);
   tunnelResponse.once('response', onResponse);
 });
 
-httpServer.listen(process.env.PORT || 3000);
-console.log(`app start at 1 http://localhost:${process.env.PORT || 3000}`);
+httpServer.listen(process.env.PORT || 3000, () => {
+  console.log(`🚀 Server started at http://localhost:${process.env.PORT || 3000}`);
+});
