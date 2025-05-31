@@ -13,15 +13,14 @@ const { TunnelRequest, TunnelResponse } = require('./lib');
 const app = express();
 const httpServer = http.createServer(app);
 
-// 1️⃣ Socket.IO instance cho dashboard (mặc định path: /socket.io)
-const ioDashboard = new Server(httpServer, { cors: { origin: '*' }, path: '/dashboard-socket' });
-
 // 2️⃣ Socket.IO instance cho tunnel client (path: /$web_tunnel)
 const ioTunnel = new Server(httpServer, {
   path: '/$web_tunnel',
-  maxHttpBufferSize: 1e8,
-  cors: { origin: '*' },
+  maxHttpBufferSize: 1e8
 });
+
+// 1️⃣ Socket.IO instance cho dashboard (mặc định path: /socket.io)
+const ioDashboard = new Server(httpServer, { cors: { origin: '*' }, path: '/dashboard-socket' });
 
 require('events').defaultMaxListeners = 30;
 
