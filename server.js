@@ -308,6 +308,15 @@ httpServer.on('upgrade', (req, socket, head) => {
   tunnelResponse.once('response', onResponse);
 });
 
+// Admin API: List active tunnels
+app.get('/tunnels', (req, res) => {
+  res.json(tunnelSockets.map((s) => ({
+    host: s.host,
+    pathPrefix: s.pathPrefix,
+    connected: s.socket.connected,
+  })));
+});
+
 httpServer.listen(process.env.PORT || 3000, () => {
   console.log(`🚀 Server started at http://localhost:${process.env.PORT || 3000}`);
 });
