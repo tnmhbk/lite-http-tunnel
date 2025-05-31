@@ -12,9 +12,9 @@
 <h1>Proxy Dashboard</h1>
 <pre id="log"></pre>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="/dashboard-socket/socket.io.js"></script>
 <script>
-  const socket = io('/dashboard-logs');
+  const socket = io('/', { path: '/dashboard-socket' });
   const logEl = document.getElementById('log');
 
   socket.on('connect', () => {
