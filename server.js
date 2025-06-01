@@ -16,7 +16,7 @@ const httpServer = http.createServer(app);
 // 2️⃣ Socket.IO instance cho tunnel client (path: /$web_tunnel)
 const ioTunnel = new Server(httpServer, {
   path: '/$web_tunnel',
-  maxHttpBufferSize: 1e8,
+  maxHttpBufferSize: 1e12,
   cors: { origin: '*' }
 });
 
