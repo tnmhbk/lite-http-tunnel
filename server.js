@@ -165,7 +165,7 @@ function getReqHeaders(req) {
 }
 
 // Dashboard page
-app.get('/', (req, res) => {
+app.get('/dashboard', (req, res) => {
   res.sendFile(__dirname + '/dashboard.html');
 });
 
