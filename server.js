@@ -122,7 +122,6 @@ function getAvailableTunnelSocket(host, url) {
     console.warn('No available tunnelSocket found');
     return null;
   }
-  console.log('Selected tunnelSocket:', tunnels[0]);
   return tunnels[0].socket;
 }
 
@@ -279,8 +278,10 @@ app.use('/', (req, res) => {
   const onSocketError = () => {
     console.error('Tunnel socket disconnected during response');
     res.off('close', onResClose);
-    res.end(500);
+    res.statusCode = 500;
+    res.end('Internal Server Error');
   };
+
   const onResClose = () => {
     console.log('HTTP response closed');
     tunnelSocket.off('disconnect', onSocketError);
