@@ -23,7 +23,7 @@ const dashboardNamespace = io.of('/dashboard');
 // --- Hook console log ---
 const consoleEmit = (type, args) => {
   const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : a)).join(' ');
-  io.emit('proxy-log', {
+  dashboardNamespace.emit('proxy-log', {
     time: new Date().toISOString(),
     type,
     message
