@@ -87,7 +87,7 @@ function setTunnelSocket(host, pathPrefix, socket) {
     pathPrefix,
     socket,
   });
-  console.log('Current tunnelSockets:', tunnelSockets);
+  console.log('Current tunnelSockets:', tunnelSockets.length);
 }
 
 function removeTunnelSocket(host, pathPrefix) {
@@ -95,7 +95,7 @@ function removeTunnelSocket(host, pathPrefix) {
   tunnelSockets = tunnelSockets.filter((s) =>
     !(s.host === host && s.pathPrefix === pathPrefix)
   );
-  console.log('tunnelSockets after remove:', tunnelSockets);
+  console.log('tunnelSockets after remove:', tunnelSockets.length);
 }
 
 function getAvailableTunnelSocket(host, url) {
