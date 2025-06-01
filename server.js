@@ -23,12 +23,23 @@ const dashboardNamespace = io.of('/dashboard');
 
 // --- Hook console log ---
 const consoleEmit = (type, args) => {
-  const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : a)).join(' ');
+  const message = args.map(a => {
+    if (typeof a === 'object') {
+      try {
+        return JSON.stringify(a, null, 2);
+      } catch (err) {
+        return '[Circular object]'; // tránh lỗi JSON
+      }
+    }
+    return a;
+  }).join(' ');
+
   const logData = {
     time: new Date().toISOString(),
     type,
     message
   };
+
   recentLogs.push(logData);
 
   // Giới hạn 200 log gần nhất
@@ -46,6 +57,7 @@ const consoleEmit = (type, args) => {
     orig.apply(console, args); // vẫn in ra console cũ
   };
 });
+
 
 dashboardNamespace.on('connection', (socket) => {
   console.log('Dashboard client connected');
