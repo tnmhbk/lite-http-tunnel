@@ -9,6 +9,9 @@ require('dotenv').config();
 
 const { TunnelRequest, TunnelResponse } = require('./lib');
 
+const MAX_LOGS = 200;
+const recentLogs = [];
+
 const app = express();
 const httpServer = http.createServer(app);
 const webTunnelPath = '/$web_tunnel';
@@ -21,11 +24,19 @@ const dashboardNamespace = io.of('/dashboard');
 // --- Hook console log ---
 const consoleEmit = (type, args) => {
   const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : a)).join(' ');
-  dashboardNamespace.emit('proxy-log', {
+  const logData = {
     time: new Date().toISOString(),
     type,
     message
-  });
+  };
+  recentLogs.push(logData);
+
+  // Giới hạn 200 log gần nhất
+  if (recentLogs.length > MAX_LOGS) {
+    recentLogs.shift(); // Xoá log cũ nhất
+  }
+
+  dashboardNamespace.emit('proxy-log', logData);
 };
 
 ['log', 'error', 'warn', 'info', 'debug'].forEach(method => {
@@ -38,6 +49,10 @@ const consoleEmit = (type, args) => {
 
 dashboardNamespace.on('connection', (socket) => {
   console.log('Dashboard client connected');
+
+  // Gửi 200 log cũ cho dashboard mới connect
+  socket.emit('proxy-log-history', recentLogs);
+
   socket.on('disconnect', () => {
     console.log('Dashboard client disconnected');
   });
