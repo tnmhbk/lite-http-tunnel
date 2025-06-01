@@ -163,10 +163,6 @@ function getReqHeaders(req) {
   return headers;
 }
 
-app.get('/dashboard', (req, res) => {
-  res.sendFile(__dirname + '/dashboard.html');
-});
-
 app.use('/', (req, res) => {
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
   if (!tunnelSocket) {
