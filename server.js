@@ -18,6 +18,8 @@ const io = new Server(httpServer, {
   path: webTunnelPath,
 });
 
+const dashboardNamespace = io.of('/dashboard');
+
 // --- Hook console log ---
 const consoleEmit = (type, args) => {
   const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : a)).join(' ');
