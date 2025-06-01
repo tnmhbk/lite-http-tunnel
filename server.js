@@ -9,7 +9,7 @@ require('dotenv').config();
 
 const { TunnelRequest, TunnelResponse } = require('./lib');
 
-const MAX_LOGS = 200;
+const MAX_LOGS = 100;
 const recentLogs = [];
 
 const app = express();
@@ -17,6 +17,7 @@ const httpServer = http.createServer(app);
 const webTunnelPath = '/$web_tunnel';
 const io = new Server(httpServer, {
   path: webTunnelPath,
+  maxHttpBufferSize: 1e8, // 100MB
 });
 
 const dashboardNamespace = io.of('/dashboard');
