@@ -28,6 +28,13 @@
     logEl.innerText += line + '\n';
     logEl.scrollTop = logEl.scrollHeight;
   });
+  socket.on('proxy-log-history', (logs) => {
+  logs.forEach(data => {
+    const line = `[${data.time}] ${data.type === 'error' ? '[ERROR]' : ''} ${data.message}`;
+    logEl.innerText += line + '\n';
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+});
 </script>
 </body>
 </html>
