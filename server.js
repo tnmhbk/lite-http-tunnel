@@ -117,7 +117,7 @@ function getAvailableTunnelSocket(host, url) {
     }
     return b.pathPrefix.length - a.pathPrefix.length;
   });
-  console.log('Available tunnels:', tunnels);
+  console.log('Available tunnels:', tunnels.length);
   if (tunnels.length === 0) {
     console.warn('No available tunnelSocket found');
     return null;
