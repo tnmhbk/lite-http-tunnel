@@ -9,6 +9,25 @@ require('dotenv').config();
 
 const { TunnelRequest, TunnelResponse } = require('./lib');
 
+// --- Hook console log ---
+const consoleEmit = (type, args) => {
+  const message = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 2) : a)).join(' ');
+  io.emit('proxy-log', {
+    time: new Date().toISOString(),
+    type,
+    message
+  });
+};
+
+['log', 'error', 'warn', 'info', 'debug'].forEach(method => {
+  const orig = console[method];
+  console[method] = (...args) => {
+    consoleEmit(method, args);
+    orig.apply(console, args); // vẫn in ra console cũ
+  };
+});
+
+
 const app = express();
 const httpServer = http.createServer(app);
 const webTunnelPath = '/$web_tunnel';
