@@ -9,8 +9,11 @@ require('dotenv').config();
 
 const { TunnelRequest, TunnelResponse } = require('./lib');
 
-const MAX_LOGS = 100;
 const recentLogs = [];
+let totalRequests = 0;
+const ipStats = {};
+const MAX_LOGS = 200;
+const ipAccessLogs = [];
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -224,7 +227,27 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(__dirname + '/dashboard.html');
 });
 
+app.get('/access-stats', (req, res) => {
+  res.json({
+    totalRequests,
+    ipStats,
+    ipAccessLogs
+  });
+});
+
 app.use('/', (req, res) => {
+   totalRequests++;
+  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  
+  // Ghi log IP vào buffer
+  const logMessage = `${new Date().toISOString()} - IP ${ip} đã truy cập`;
+  ipAccessLogs.push(logMessage);
+  if (ipAccessLogs.length > MAX_LOGS) {
+    ipAccessLogs.shift();
+  }
+  // Đếm IP
+  ipStats[ip] = (ipStats[ip] || 0) + 1;
+  
   console.log('Incoming HTTP request:', req.method, req.url);
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
   if (!tunnelSocket) {
