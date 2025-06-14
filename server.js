@@ -238,16 +238,16 @@ app.get('/access-stats', (req, res) => {
 app.use('/', (req, res) => {
    totalRequests++;
   const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  
-  // Ghi log IP vào buffer
-  const logMessage = `${new Date().toISOString()} - IP ${ip} đã truy cập`;
-  ipAccessLogs.push(logMessage);
-  if (ipAccessLogs.length > MAX_LOGS) {
-    ipAccessLogs.shift();
+
+   if (req.originalUrl.includes('/login')) {
+    const logMessage = `${new Date().toISOString()} - IP ${ip} đã truy cập ${req.originalUrl}`;
+    ipAccessLogs.push(logMessage);
+    if (ipAccessLogs.length > MAX_LOGS) {
+      ipAccessLogs.shift();
+    }
+    // Đếm IP
+    ipStats[ip] = (ipStats[ip] || 0) + 1;
   }
-  // Đếm IP
-  ipStats[ip] = (ipStats[ip] || 0) + 1;
-  
   console.log('Incoming HTTP request:', req.method, req.url);
   const tunnelSocket = getAvailableTunnelSocket(req.headers.host, req.url);
   if (!tunnelSocket) {
